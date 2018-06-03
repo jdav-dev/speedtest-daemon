@@ -1,0 +1,28 @@
+#!/bin/sh -ex
+
+TESTED_HOST="${TESTED_HOST:-$(/bin/hostname)}"
+INFLUXDB_HOST="${INFLUXDB_HOST:-http://localhost}"
+INFLUXDB_PORT="${INFLUXDB_PORT:-8086}"
+INFLUXDB_DB="${INFLUXDB_DB:-speedtests}"
+
+speedtest_args="--json --secure"
+
+if [ -n "$SPEEDTEST_SERVER_ID" ]; then
+    speedtest_args="${speedtest_args} --server=$SPEEDTEST_SERVER_ID"
+fi
+
+while true; do
+    /bin/sleep $((60 - $(date +%S) ))
+
+    /usr/local/bin/speedtest ${speedtest_args} \
+    | /usr/bin/jq \
+        --raw-output \
+        --arg host ${TESTED_HOST} \
+        '"speedtests,host=\($host),speedtest_server_id=\(.server.id) download=\(.download),upload=\(.upload),ping=\(.ping) \(.timestamp | capture("(?<datetime>[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}).[0-9]{6}Z") | "\(.datetime | strptime("%Y-%m-%dT%H:%M:%S") | mktime)")"' \
+    | /usr/bin/curl \
+        --silent \
+        --show-error \
+        --request POST \
+        --data-binary @- \
+        "${INFLUXDB_HOST}:${INFLUXDB_PORT}/write?db=${INFLUXDB_DB}&precision=s"
+done
