@@ -1,9 +1,11 @@
-#!/bin/sh -ex
+#!/bin/bash -ex
 
 TESTED_HOST="${TESTED_HOST:-$(/bin/hostname)}"
 INFLUXDB_HOST="${INFLUXDB_HOST:-http://localhost}"
 INFLUXDB_PORT="${INFLUXDB_PORT:-8086}"
 INFLUXDB_DB="${INFLUXDB_DB:-speedtests}"
+INTERVAL_SECONDS="${INTERVAL_SECONDS:-300}"
+OFFSET_SECONDS="${OFFSET_SECONDS:-$(($RANDOM % 300))}"
 
 speedtest_args="--json --secure"
 
@@ -11,8 +13,10 @@ if [ -n "$SPEEDTEST_SERVER_ID" ]; then
     speedtest_args="${speedtest_args} --server=$SPEEDTEST_SERVER_ID"
 fi
 
+/bin/sleep $OFFSET_SECONDS
+
 while true; do
-    /bin/sleep $((60 - $(date +%S) ))
+    start_time="$(date +%s)"
 
     /usr/local/bin/speedtest ${speedtest_args} \
     | /usr/bin/jq \
@@ -25,4 +29,9 @@ while true; do
         --request POST \
         --data-binary @- \
         "${INFLUXDB_HOST}:${INFLUXDB_PORT}/write?db=${INFLUXDB_DB}&precision=s"
-done
+
+    end_time=$(date +%s)
+    elapsed_seconds=$(($end_time - $start_time))
+
+    /bin/sleep $(($INTERVAL_SECONDS - $elapsed_seconds))
+done 
